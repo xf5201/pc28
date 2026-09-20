@@ -1,0 +1,30 @@
+{
+  "name": "pc28-multi-user-system",
+  "version": "1.0.0",
+  "description": "PC28 多用户自动化下注系统",
+  "main": "src/index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.4.2",
+    "gram": "^3.0.1",
+    "socks": "^2.8.9",
+    "telegraf": "^4.16.3",
+    "telegram": "^2.26.16",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
