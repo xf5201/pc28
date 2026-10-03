@@ -28,6 +28,22 @@ function calcSwitchLong(lastDir, initialMode, currDir) {
   return mode === MODES.FOLLOW ? lastDir : (OPPOSITE[lastDir] || lastDir);
 }
 
+/**
+ * 计算下一期的连挂数与当前模式（仅顺2反龙 / 反2顺龙使用）
+ *
+ * 规则：
+ *   1. 回本（豹子/对子/顺子/13-14）→ 连挂数与模式都不变，等于这期白打
+ *   2. 赢            → 连挂数清零，模式保持不变
+ *   3. 输            → 连挂数 +1，且每满 2 次翻转一次模式（顺↔反）
+ *
+ * ⚠️ 关键：newLosses 必须持续累加，不能清零！
+ *    因为 consecutive_losses 同时驱动倍投金额 calcAmount(base, ratio, losses)，
+ *    一旦清零，倍投指数就永远停在 0/1，连输后不会加倍。
+ *
+ * 【本次修复】切换条件从 (newLosses >= 2) 改为 (newLosses % 2 === 0)
+ *    旧写法：losses 到了 2 之后就永远 >= 2，导致从第 3 期开始每输一把翻一次方向
+ *    新写法：只在第 2、4、6、8... 次连输时翻转，即"每连输两把翻一次"
+ */
 function calcNextState(playType, isWin, isRebate, currentLosses, currentMode) {
   if (playType !== '顺2反龙' && playType !== '反2顺龙') return null;
 
@@ -35,15 +51,19 @@ function calcNextState(playType, isWin, isRebate, currentLosses, currentMode) {
   const validModes = [MODES.FOLLOW, MODES.REVERSE];
   const mode = validModes.includes(currentMode) ? currentMode : initialMode;
 
+  // 1️⃣ 回本：连挂数与模式都保持不变
   if (isRebate) return { newLosses: currentLosses, newMode: mode };
+
+  // 2️⃣ 赢：连挂数清零，模式保持不变
   if (isWin) return { newLosses: 0, newMode: mode };
 
-  let newLosses = currentLosses + 1;
-  let newMode = mode;
-  if (newLosses >= SWITCH_THRESHOLD) {
-    newMode = (mode === MODES.FOLLOW) ? MODES.REVERSE : MODES.FOLLOW;
-    // newLosses 保持 currentLosses + 1，不重置
-  }
+  // 3️⃣ 输：连挂数 +1（持续累加，供倍投使用）
+  //    每满 2 次翻转一次模式
+  const newLosses = currentLosses + 1;
+  const newMode = (newLosses % SWITCH_THRESHOLD === 0)
+    ? (mode === MODES.FOLLOW ? MODES.REVERSE : MODES.FOLLOW)
+    : mode;
+
   return { newLosses, newMode };
 }
 

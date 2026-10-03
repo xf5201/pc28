@@ -8,7 +8,7 @@ module.exports = {
     script: './src/index.js',
     
     // 工作目录（Termux 完整路径）
-    cwd: '/data/data/com.termux/files/home/1',
+    cwd: 'E:\\1\\pc28',
     
     // 实例数（必须为 1，多实例会导致 Session 冲突）
     instances: 1,

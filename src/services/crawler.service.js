@@ -6,57 +6,106 @@ const logger = require('../utils/logger');
 const { toBeijingTime } = require('../utils/format.util');
 
 /**
- * 开奖数据爬虫服务 (适配 pc20.net 真实 API)
+ * 开奖数据爬虫服务 (适配 pc20.net 真实 API) —— 定点动态调度版
+ *
+ * ── 调度策略 ──
+ * 下期预计开奖时刻 = 本期 openTime + 动态间隔 + bufferMs
+ * 动态间隔取最近 20 期 openTime 差值的中位数，抵抗单期抖动与异常延迟。
+ * 封盘时长会随时间变化（实测 198 → 206 秒），因此间隔必须动态算，绝不写死。
+ *
+ * ── 兜底保障 ──
+ * 1. 60 秒慢轮询：仅在定点定时器明显超时时补抓
+ * 2. 指数退避：预约时刻已过但无新数据时，5s → 10s → ... → 最多 60s
+ * 3. _busy 闸门：防止上一轮未结束时重叠执行
  *
  * ── 跳期补录 ──
- * 服务停机 / 网络中断期间可能跨越多个期次。
- * 本服务以 open_results 中已记录的最大期号序号为基准，
- * 将 API 返回列表中所有更新的期次按序号升序逐条补录，并对每一期执行结算；
- * 仅对「最新一期」触发下一期下注，中间补录的期次不再生成新注。
+ * 以 open_results 中最大期号为基准，按序号升序逐条补录并逐期结算；
+ * 仅对最新一期触发下一期下注。
  */
 class CrawlerService {
   constructor(deps) {
     this.settlementService = deps.settlementService;
     this.strategyExecutor = deps.strategyExecutor;
     this.periodService = deps.periodService;
+
     this.intervalMs = deps.intervalMs || 5000;
+    this.bufferMs = deps.bufferMs || 10000;                  // 开奖后缓冲 10 秒
+    this.fallbackMs = deps.fallbackMs || 60000;              // 兜底轮询 60 秒
+    this.defaultIntervalMs = deps.defaultIntervalMs || 210000; // 首次启动间隔兜底
+
     this._timer = null;
+    this._fallbackTimer = null;
     this._running = false;
+    this._busy = false;
+    this._lastInterval = null;
+    this._nextWakeAt = 0;
+    this._missCount = 0;
   }
 
   start() {
     if (this._running) return;
     this._running = true;
-    logger.info(`[CRAWLER] 爬虫已启动，轮询间隔 ${this.intervalMs}ms`);
+    logger.info(
+      `[CRAWLER] 爬虫已启动（定点模式：动态间隔 + ${this.bufferMs}ms 缓冲，兜底 ${this.fallbackMs}ms）`
+    );
 
     this.fetchAndDispatch().catch((err) => logger.error(`[CRAWLER] 首次抓取失败: ${err.message}`));
 
-    this._timer = setInterval(() => {
-      this.fetchAndDispatch().catch((err) => logger.error(`[CRAWLER] 抓取失败: ${err.message}`));
-    }, this.intervalMs);
+    this._fallbackTimer = setInterval(() => {
+      if (!this._running || this._busy) return;
+      if (this._nextWakeAt > 0 && Date.now() >= this._nextWakeAt + 5000) {
+        logger.warn('[CRAWLER] 定点唤醒超时，兜底补抓');
+        this.fetchAndDispatch().catch((err) => logger.error(`[CRAWLER] 兜底抓取失败: ${err.message}`));
+      }
+    }, this.fallbackMs);
 
-    if (this._timer.unref) this._timer.unref();
+    if (this._fallbackTimer.unref) this._fallbackTimer.unref();
   }
 
   stop() {
-    if (this._timer) clearInterval(this._timer);
+    if (this._timer) clearTimeout(this._timer);
+    if (this._fallbackTimer) clearInterval(this._fallbackTimer);
+    this._timer = null;
+    this._fallbackTimer = null;
     this._running = false;
     logger.info('[CRAWLER] 爬虫已停止');
   }
 
-  /**
-   * 抓取 → 解析 → 补录 → 结算 → 触发下注
-   */
   async fetchAndDispatch() {
-    // 1. 抓取真实 API
+    if (this._busy) {
+      logger.debug('[CRAWLER] 上一轮仍在执行，跳过本次');
+      return;
+    }
+    this._busy = true;
+    try {
+      await this._doFetchAndDispatch();
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  async _doFetchAndDispatch() {
     const rawData = await this._fetch();
-    if (!rawData) return;
+    if (!rawData) {
+      this._scheduleRetry('抓取失败');
+      return;
+    }
 
-    // 2. 解析全部期次（按序号升序）
     const list = this._parseAll(rawData);
-    if (!list || list.length === 0) return;
+    if (!list || list.length === 0) {
+      this._scheduleRetry('解析结果为空');
+      return;
+    }
 
-    // 3. 以本地最大期号为基准，筛出需要补录的期次
+    const dynInterval = this._calcDynamicInterval(list);
+    if (dynInterval) {
+      if (this._lastInterval !== dynInterval) {
+        logger.info(`[CRAWLER] 动态间隔更新: ${Math.round(dynInterval / 1000)} 秒`);
+      }
+      this._lastInterval = dynInterval;
+    }
+    const interval = this._lastInterval || this.defaultIntervalMs;
+
     const maxTerm = openResultDao.getMaxTerm();
     const missing = list
       .filter((p) => p.term > maxTerm)
@@ -64,19 +113,20 @@ class CrawlerService {
 
     if (missing.length === 0) {
       logger.debug(`[CRAWLER] 无新开奖（本地最新序号: ${maxTerm}）`);
+      this._scheduleRetry('无新开奖');
       return;
     }
+
+    this._missCount = 0;
 
     const firstTerm = missing[0].term;
     const lastTerm = missing[missing.length - 1].term;
 
-    // 4. 跳期检测与告警
     if (missing.length > 1) {
       logger.warn(
         `[CRAWLER] 检测到跳期，开始补录 ${missing.length} 期: ${firstTerm} → ${lastTerm}`
       );
     }
-    // API 返回条数有限，可能有更早的期次拿不到
     if (maxTerm > 0 && firstTerm > maxTerm + 1) {
       logger.warn(
         `[CRAWLER] 仍有 ${firstTerm - maxTerm - 1} 期无法补录` +
@@ -84,7 +134,6 @@ class CrawlerService {
       );
     }
 
-    // 5. 清理过期未发出的下注（CREATED），避免永久悬挂
     try {
       const canceled = betRecordDao.cancelStaleCreated(lastTerm);
       if (canceled > 0) {
@@ -94,7 +143,6 @@ class CrawlerService {
       logger.error(`[CRAWLER] 清理过期下注失败: ${err.message}`);
     }
 
-    // 6. 按序号升序逐条补录 + 结算
     for (let i = 0; i < missing.length; i++) {
       const p = missing[i];
 
@@ -119,24 +167,21 @@ class CrawlerService {
         logger.debug(`[CRAWLER] 期号 ${p.period} 已存在，跳过插入`);
       }
 
-      // 每期都尝试结算：补录的历史期次同样可能有对应下注
       try {
         await this.settlementService.settleAll(p.period);
       } catch (error) {
         logger.error(`[CRAWLER] 结算异常: 期号=${p.period} → ${error.message}`, error);
       }
 
-      // 7. 仅对最新一期触发下一期下注
       if (i === missing.length - 1) {
         await this._triggerAllRunning(p.nextPeriod);
       }
     }
+
+    const latest = list[list.length - 1];
+    this._scheduleNext(latest.openTimeMs, interval);
   }
 
-  /**
-   * 触发所有 RUNNING 用户的下一期下注
-   * @param {string} nextPeriod
-   */
   async _triggerAllRunning(nextPeriod) {
     try {
       const runningStrategies = strategyConfigDao.getAllRunning();
@@ -172,10 +217,6 @@ class CrawlerService {
     }
   }
 
-  /**
-   * 解析 API 返回的全部期次（按序号升序）
-   * @returns {Array}
-   */
   _parseAll(rawData) {
     const list = rawData?.data;
     if (!Array.isArray(list) || list.length === 0) return [];
@@ -189,10 +230,6 @@ class CrawlerService {
     return out.sort((a, b) => a.term - b.term);
   }
 
-  /**
-   * 解析单条开奖记录
-   * @returns {object|null}
-   */
   _parseItem(item) {
     try {
       const { sum1, sum2, sum3, r1, r2, term, openTime, closeTime } = item;
@@ -208,17 +245,20 @@ class CrawlerService {
         return null;
       }
 
-      // 将 openTime 转为北京时间日期（用于期号）
-      const beijingOpenDate = new Date(openTime + 8 * 3600 * 1000); // 假设 openTime 是 UTC 毫秒
-      const dateStr = this._formatDate(beijingOpenDate);
+      const openTimeMs = Number(openTime);
+      const closeTimeMs = Number(closeTime);
+
+      // 【修复】统一用 toBeijingTime 换算北京时间日期
+      // 原写法 new Date(openTime + 8*3600*1000) 再按本地时区 getFullYear()，
+      // 在 TZ=Asia/Shanghai 下等于 UTC+16，导致北京时间 16:00-24:00 的期号多一天
+      const dateStr = toBeijingTime(openTimeMs, 'YYYYMMDD');
       const period = `${dateStr}-${term}`;
 
-      // 推导下一期
       const nextTerm = Number(term) + 1;
-      const nextOpenTimeMs = closeTime;
-      const nextDateStr = this._formatDate(new Date(nextOpenTimeMs + 8 * 3600 * 1000)); // 北京时间
+      const nextOpenTimeMs = closeTimeMs;
+      const nextDateStr = toBeijingTime(nextOpenTimeMs, 'YYYYMMDD');
       const nextPeriod = `${nextDateStr}-${nextTerm}`;
-      const nextOpenTime = toBeijingTime(nextOpenTimeMs); // 北京时间字符串
+      const nextOpenTime = toBeijingTime(nextOpenTimeMs);
 
       const openNumber = `${n1},${n2},${n3}`;
       const openText = `${n1}+${n2}+${n3}=${n1 + n2 + n3}`;
@@ -233,7 +273,9 @@ class CrawlerService {
         openNumber,
         openText,
         direction,
-        openTime: toBeijingTime(openTime),
+        openTime: toBeijingTime(openTimeMs),
+        openTimeMs,
+        closeTimeMs,
         nextPeriod,
         nextOpenTime,
         rawPayload: item,
@@ -242,6 +284,79 @@ class CrawlerService {
       logger.error(`[CRAWLER] 解析失败: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * 动态计算开奖间隔：最近 20 期 openTime 差值的中位数
+   * 用中位数抵抗单期抖动（209/210 混排）与异常延迟
+   */
+  _calcDynamicInterval(list) {
+    const times = list
+      .filter((p) => Number.isFinite(p.openTimeMs))
+      .map((p) => p.openTimeMs)
+      .sort((a, b) => a - b);
+
+    if (times.length < 2) return null;
+
+    const recent = times.slice(-20);
+
+    const gaps = [];
+    for (let i = 1; i < recent.length; i++) {
+      const gap = recent[i] - recent[i - 1];
+      if (gap >= 30000 && gap <= 600000) gaps.push(gap);
+    }
+    if (gaps.length === 0) return null;
+
+    gaps.sort((a, b) => a - b);
+    return gaps[Math.floor(gaps.length / 2)];
+  }
+
+  /**
+   * 预约下一次抓取
+   * wakeAt = 本期 openTime + 动态间隔 + bufferMs
+   */
+  _scheduleNext(latestOpenMs, intervalMs) {
+    if (!Number.isFinite(latestOpenMs)) return;
+
+    const wakeAt = latestOpenMs + intervalMs + this.bufferMs;
+    let delay = wakeAt - Date.now();
+
+    if (delay >= 1000) {
+      this._missCount = 0;
+    } else {
+      this._missCount += 1;
+      delay = Math.min(5000 * this._missCount, this.fallbackMs);
+      logger.debug(`[CRAWLER] 预约时刻已过，${Math.round(delay / 1000)} 秒后重试（第 ${this._missCount} 次）`);
+    }
+
+    this._nextWakeAt = wakeAt;
+
+    if (this._timer) clearTimeout(this._timer);
+    this._timer = setTimeout(() => {
+      this.fetchAndDispatch().catch((err) => logger.error(`[CRAWLER] 抓取失败: ${err.message}`));
+    }, delay);
+
+    if (this._timer.unref) this._timer.unref();
+
+    logger.info(
+      `[CRAWLER] 下次抓取预约: ${new Date(wakeAt).toLocaleString('zh-CN')}` +
+      `（${Math.round(delay / 1000)} 秒后，动态间隔=${Math.round(intervalMs / 1000)} 秒）`
+    );
+  }
+
+  _scheduleRetry(reason) {
+    this._missCount += 1;
+    const delay = Math.min(5000 * this._missCount, this.fallbackMs);
+
+    if (this._timer) clearTimeout(this._timer);
+    this._timer = setTimeout(() => {
+      this.fetchAndDispatch().catch((err) => logger.error(`[CRAWLER] 抓取失败: ${err.message}`));
+    }, delay);
+
+    if (this._timer.unref) this._timer.unref();
+
+    this._nextWakeAt = Date.now() + delay;
+    logger.debug(`[CRAWLER] ${reason}，${Math.round(delay / 1000)} 秒后重试（第 ${this._missCount} 次）`);
   }
 
   _formatDate(date) {

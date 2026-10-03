@@ -29,7 +29,7 @@ class PeriodService {
     return `${dateStr}-${term + 1}`;
   }
 
-  deriveNextOpenTime(currentOpenTime, intervalSeconds = 180) {
+  deriveNextOpenTime(currentOpenTime, intervalSeconds = 210) {
     const current = new Date(currentOpenTime);
     if (isNaN(current.getTime())) return null;
     return new Date(current.getTime() + intervalSeconds * 1000).toISOString();
