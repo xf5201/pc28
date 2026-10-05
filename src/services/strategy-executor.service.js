@@ -7,22 +7,8 @@ const operationLogDao = require('../db/operation-log.dao');
 const { transaction } = require('../db/connection');
 const { calcDirection, calcAmount, initialModeFor } = require('../core/strategy.engine');
 const { getOdds } = require('../core/odds.engine');
+const { termOf } = require('../utils/period.util');
 const logger = require('../utils/logger');
-
-/**
- * 从期号中解析出全局递增的序号
- * 期号格式：YYYYMMDD-N...（如 20260813-26244）
- *
- * @param {string} period
- * @returns {number|null} 解析失败返回 null
- */
-function termOf(period) {
-  if (!period) return null;
-  const idx = String(period).indexOf('-');
-  if (idx < 0) return null;
-  const n = parseInt(String(period).slice(idx + 1), 10);
-  return Number.isNaN(n) ? null : n;
-}
 
 class StrategyExecutorService {
   constructor(deps) {

@@ -163,6 +163,19 @@ const betRecordDao = {
   },
 
   /**
+   * 获取所有用户的待结算下注（补录对账用），按期号序号升序
+   * @returns {Array}
+   */
+  listAllPending() {
+    const db = getConnection();
+    return db.prepare(`
+      SELECT * FROM bet_records
+      WHERE status IN ('SENT', 'PENDING')
+      ORDER BY CAST(substr(period, instr(period, '-') + 1) AS INTEGER) ASC, id ASC
+    `).all();
+  },
+
+  /**
    * 获取用户最近的 N 条下注记录
    * @param {string} botUserId
    * @param {number} limit

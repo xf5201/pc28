@@ -2,7 +2,9 @@
 const openResultDao = require('../db/open-result.dao');
 const betRecordDao = require('../db/bet-record.dao');
 const strategyConfigDao = require('../db/strategy-config.dao');
+const operationLogDao = require('../db/operation-log.dao');
 const logger = require('../utils/logger');
+const { termOf } = require('../utils/period.util');
 const { toBeijingTime } = require('../utils/format.util');
 
 /**
@@ -19,8 +21,9 @@ const { toBeijingTime } = require('../utils/format.util');
  * 3. _busy 闸门：防止上一轮未结束时重叠执行
  *
  * ── 跳期补录 ──
- * 以 open_results 中最大期号为基准，按序号升序逐条补录并逐期结算；
- * 仅对最新一期触发下一期下注。
+ * 以本地已记录的期号序号（term）集合为基准，API 返回范围内所有缺失期
+ * （含停机造成的中间空洞）按序号升序逐条补录；
+ * 每轮补录后统一按 term 对账结算所有 SENT/PENDING 下注，仅对最新一期触发下一期下注。
  */
 class CrawlerService {
   constructor(deps) {
@@ -107,8 +110,11 @@ class CrawlerService {
     const interval = this._lastInterval || this.defaultIntervalMs;
 
     const maxTerm = openResultDao.getMaxTerm();
+    // 用 term 集合判断缺失，而不是只看 maxTerm：
+    // 停机重启后本地数据可能出现中间空洞，只补 "> maxTerm" 永远填不上
+    const localTerms = openResultDao.getAllTerms();
     const missing = list
-      .filter((p) => p.term > maxTerm)
+      .filter((p) => !localTerms.has(p.term))
       .sort((a, b) => a.term - b.term);
 
     if (missing.length === 0) {
@@ -167,19 +173,69 @@ class CrawlerService {
         logger.debug(`[CRAWLER] 期号 ${p.period} 已存在，跳过插入`);
       }
 
-      try {
-        await this.settlementService.settleAll(p.period);
-      } catch (error) {
-        logger.error(`[CRAWLER] 结算异常: 期号=${p.period} → ${error.message}`, error);
-      }
-
       if (i === missing.length - 1) {
         await this._triggerAllRunning(p.nextPeriod);
       }
     }
 
+    // 统一补录对账结算：按 term 匹配所有 SENT/PENDING 下注
+    // （涵盖刚补录的期次、本地已有结果但漏结算的期次、以及
+    //   期号字符串不一致的历史遗留注单）
+    try {
+      const { settled, unresolved } = await this.settlementService.settleBacklog();
+      if (settled > 0) {
+        logger.info(`[CRAWLER] 补录结算: 本轮共结算 ${settled} 条`);
+      }
+      if (unresolved.length > 0) {
+        logger.warn(
+          `[CRAWLER] 仍有 ${unresolved.length} 条下注无开奖结果，等待后续补录` +
+          `（期号: ${unresolved.slice(0, 3).map((b) => b.period).join(', ')}${unresolved.length > 3 ? ' ...' : ''}）`
+        );
+      }
+    } catch (error) {
+      logger.error(`[CRAWLER] 补录对账结算异常: ${error.message}`, error);
+    }
+
+    // 兜底撤单：期号早于数据源最早可补录期的未结算注单，
+    // 其开奖结果已永远拿不到，继续悬挂只会永久占用"待结算"状态
+    this._cancelUnsettleableBets(list[0].term);
+
     const latest = list[list.length - 1];
     this._scheduleNext(latest.openTimeMs, interval);
+  }
+
+  /**
+   * 撤单无法补录结算的未结算注单（SENT/PENDING 且早于数据源最早可补录期）
+   *
+   * @private
+   * @param {number} earliestFetchableTerm - 数据源 API 返回的最早一期序号
+   */
+  _cancelUnsettleableBets(earliestFetchableTerm) {
+    if (!Number.isFinite(earliestFetchableTerm)) return;
+
+    try {
+      const stale = betRecordDao
+        .listAllPending()
+        .filter((b) => {
+          const t = termOf(b.period);
+          return t !== null && t < earliestFetchableTerm;
+        });
+
+      for (const bet of stale) {
+        const reason = `停机过久：期号早于数据源最早可补录期（${earliestFetchableTerm}），开奖结果无法获取，已撤单`;
+        betRecordDao.markCanceled(bet.id, reason);
+        operationLogDao.insert({
+          bot_user_id: bet.bot_user_id,
+          action: 'BET_CANCELED',
+          detail: `期号=${bet.period}, 原因=超出补录范围撤单`,
+        });
+        logger.warn(
+          `[CRAWLER] 已撤单无法补录的未结算下注: bet_id=${bet.id}, 用户=${bet.bot_user_id}, 期号=${bet.period}`
+        );
+      }
+    } catch (error) {
+      logger.error(`[CRAWLER] 超范围注单撤单失败: ${error.message}`, error);
+    }
   }
 
   async _triggerAllRunning(nextPeriod) {

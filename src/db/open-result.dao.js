@@ -63,6 +63,38 @@ const openResultDao = {
   },
 
   /**
+   * 按期号序号（term）查询
+   *
+   * term 是期次的稳定标识：旧版时区 bug 曾导致同一期的 period 字符串
+   * 在 bet_records 与 open_results 间不一致，跨表对账必须用 term。
+   * 若历史数据存在同 term 多行（日期前缀不同），取最新一条。
+   *
+   * @param {number} term
+   * @returns {object|undefined}
+   */
+  getByTerm(term) {
+    const db = getConnection();
+    return db.prepare(`
+      SELECT * FROM open_results
+      WHERE CAST(substr(period, instr(period, '-') + 1) AS INTEGER) = ?
+      ORDER BY id DESC LIMIT 1
+    `).get(term);
+  },
+
+  /**
+   * 获取本地已记录的所有期号序号集合（补录对账用）
+   * @returns {Set<number>}
+   */
+  getAllTerms() {
+    const db = getConnection();
+    const rows = db.prepare(`
+      SELECT DISTINCT CAST(substr(period, instr(period, '-') + 1) AS INTEGER) AS term
+      FROM open_results
+    `).all();
+    return new Set(rows.map((r) => Number(r.term)));
+  },
+
+  /**
    * 获取最近 N 条开奖结果
    * @param {number} limit
    * @returns {Array}

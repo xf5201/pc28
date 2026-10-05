@@ -139,6 +139,25 @@ function getPrevPeriod(currentPeriod) {
 }
 
 /**
+ * 从期号中解析全局递增序号（term）
+ *
+ * 与 extractSeq 不同：不限制序号位数（实际平台序号为 7 位，如 3490298），
+ * 也不做格式强校验。旧版时区 bug 曾导致同一期在 bet_records 与
+ * open_results 中的日期前缀不一致（如 20261001-3488377 vs 20260930-3488377），
+ * 跨表对账（补录结算）必须用序号匹配，不能用完整 period 字符串。
+ *
+ * @param {string} period
+ * @returns {number|null} 解析失败返回 null
+ */
+function termOf(period) {
+  if (!period) return null;
+  const idx = String(period).indexOf('-');
+  if (idx < 0) return null;
+  const n = parseInt(String(period).slice(idx + 1), 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+/**
  * 从期号中提取日期
  *
  * @param {string} period
@@ -217,6 +236,7 @@ module.exports = {
   getPrevPeriod,
   extractDate,
   extractSeq,
+  termOf,
   comparePeriods,
   isBefore,
   isAfter,

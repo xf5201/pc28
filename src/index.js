@@ -265,6 +265,27 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════
+  // 8.5 补录对账结算
+  // 按期号序号（term）结算历史遗留的 SENT/PENDING 下注：
+  // 停机期间已开奖且结果已在库中的直接结算；
+  // 结果缺失的留给爬虫补录后在下一轮对账中自动结算。
+  // ═══════════════════════════════════════════
+  try {
+    const { settled, unresolved } = await settlementService.settleBacklog();
+    if (settled > 0) {
+      logger.info(`[BOOT] 补录结算完成: ${settled} 条历史未结算下注已结算`);
+    }
+    if (unresolved.length > 0) {
+      logger.warn(
+        `[BOOT] ${unresolved.length} 条下注暂无开奖结果，等待爬虫补录后自动结算` +
+        `（期号: ${unresolved.slice(0, 3).map((b) => b.period).join(', ')}${unresolved.length > 3 ? ' ...' : ''}）`
+      );
+    }
+  } catch (error) {
+    logger.error(`[BOOT] 补录结算失败: ${error.message}`, error);
+  }
+
+  // ═══════════════════════════════════════════
   // 9. 启动 crawler
   // ═══════════════════════════════════════════
   crawlerService.start();

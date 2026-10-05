@@ -7,6 +7,7 @@ const operationLogDao = require('../db/operation-log.dao');
 const { transaction } = require('../db/connection');
 // 【修改】引入新增的 calcNextState
 const { checkWin, calcNextState } = require('../core/strategy.engine');
+const { termOf } = require('../utils/period.util');
 const logger = require('../utils/logger');
 
 /**
@@ -78,6 +79,60 @@ class SettlementService {
     );
 
     return Array.from(runningUsers);
+  }
+
+  /**
+   * 补录对账结算
+   *
+   * 扫描所有 SENT/PENDING 下注，按期号序号（term）匹配开奖结果并逐条结算。
+   * 用于：进程启动时、爬虫补录历史开奖之后——把停机期间遗留的未结算注单清掉。
+   *
+   * 为什么按 term 而不是 period 字符串匹配：旧版时区 bug 曾导致同一期的
+   * period 字符串在 bet_records 与 open_results 间不一致
+   * （如 20261001-3488377 vs 20260930-3488377），字符串匹配会永久漏结算。
+   *
+   * 幂等：settle 只作用于 SENT/PENDING 状态，重复调用不会重复结算。
+   *
+   * @returns {{settled: number, unresolved: Array<Object>}}
+   *          unresolved 为暂无开奖结果、需等待补录的注单
+   */
+  async settleBacklog() {
+    const pendingBets = betRecordDao.listAllPending();
+    if (pendingBets.length === 0) {
+      return { settled: 0, unresolved: [] };
+    }
+
+    logger.info(`[SETTLEMENT] 补录对账: 发现 ${pendingBets.length} 条未结算下注`);
+
+    const unresolved = [];
+    let settled = 0;
+
+    for (const bet of pendingBets) {
+      const term = termOf(bet.period);
+      const openResult = term !== null ? openResultDao.getByTerm(term) : null;
+
+      if (!openResult) {
+        unresolved.push(bet);
+        continue;
+      }
+
+      try {
+        await this._settleBet(bet, openResult);
+        settled++;
+      } catch (error) {
+        logger.error(
+          `[SETTLEMENT] 补录结算失败: bet_id=${bet.id}, 用户=${bet.bot_user_id} → ${error.message}`,
+          error
+        );
+      }
+    }
+
+    logger.info(
+      `[SETTLEMENT] 补录对账完成: 结算 ${settled} 条, ` +
+      `待补录 ${unresolved.length} 条`
+    );
+
+    return { settled, unresolved };
   }
 
   /**
