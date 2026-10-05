@@ -82,16 +82,46 @@ const openResultDao = {
   },
 
   /**
-   * 获取本地已记录的所有期号序号集合（补录对账用）
+   * 获取本地已记录的期号序号集合（补录对账用）
+   *
+   * 有 term 表达式索引(migrations/002),走索引扫描不随表增长变慢。
+   * 传入 minTerm 时只返回 >= minTerm 的 term(爬虫只关心数据源窗口内的缺失),
+   * 结果集大小受控于窗口而非全表。
+   *
+   * @param {number} [minTerm] - 只返回 >= 该序号的 term
    * @returns {Set<number>}
    */
-  getAllTerms() {
+  getAllTerms(minTerm) {
     const db = getConnection();
-    const rows = db.prepare(`
-      SELECT DISTINCT CAST(substr(period, instr(period, '-') + 1) AS INTEGER) AS term
-      FROM open_results
-    `).all();
+    const rows = Number.isFinite(minTerm)
+      ? db.prepare(`
+          SELECT DISTINCT CAST(substr(period, instr(period, '-') + 1) AS INTEGER) AS term
+          FROM open_results
+          WHERE CAST(substr(period, instr(period, '-') + 1) AS INTEGER) >= ?
+        `).all(minTerm)
+      : db.prepare(`
+          SELECT DISTINCT CAST(substr(period, instr(period, '-') + 1) AS INTEGER) AS term
+          FROM open_results
+        `).all();
     return new Set(rows.map((r) => Number(r.term)));
+  },
+
+  /**
+   * 清理过早的开奖记录（保留策略）
+   *
+   * open_results 每约 210 秒增长一期(约 410 期/天),不清理会无限膨胀。
+   * 保留天数必须大于数据源可回溯的补录窗口(实测 10000 期 ≈ 24 天),
+   * 否则会误删仍可补录的数据。历史注单/盈亏(bet_records/profit_logs)不清理。
+   *
+   * @param {number} days - 保留最近 N 天
+   * @returns {number} 删除行数
+   */
+  pruneBeforeDays(days) {
+    const db = getConnection();
+    return db.prepare(`
+      DELETE FROM open_results
+      WHERE open_time < datetime('now', '+8 hours', ?)
+    `).run(`-${days} days`).changes;
   },
 
   /**

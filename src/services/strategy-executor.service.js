@@ -10,6 +10,11 @@ const { getOdds } = require('../core/odds.engine');
 const { termOf } = require('../utils/period.util');
 const logger = require('../utils/logger');
 
+// 封盘秒数(固定值):距开奖不足该秒数时跳过本期下注。
+// 原为用户可配置项(strategy_config.cut_off_seconds),
+// 2026-10-05 起移除该配置(迁移 001),统一固定,防止用户设 0 秒导致封盘校验形同虚设。
+const CUT_OFF_SECONDS = 10;
+
 class StrategyExecutorService {
   constructor(deps) {
     this.periodService = deps.periodService;
@@ -78,7 +83,7 @@ class StrategyExecutorService {
         // 封盘校验
         const latestResult = openResultDao.getLatest();
         if (latestResult && latestResult.next_open_time) {
-          const check = this.periodService.shouldBet(period, latestResult.next_open_time, strategy.cut_off_seconds);
+          const check = this.periodService.shouldBet(period, latestResult.next_open_time, CUT_OFF_SECONDS);
           if (!check.should) {
             logger.info(`[STRATEGY_EXEC] 用户 ${botUserId} 期号 ${period} ${check.reason}`);
             return;

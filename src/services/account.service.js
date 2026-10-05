@@ -166,7 +166,6 @@ class AccountService {
           play_type: '顺龙',
           base_bet: 100,
           martingale_ratio: 2.0,
-          cut_off_seconds: 10,
         });
       }
       operationLogDao.insert({

@@ -199,7 +199,12 @@ async function main() {
   bot.start((ctx) => handleStart(ctx, { panelRenderer }));
 
   // ── 定时刷新面板（§7.12.2） ──
+  // 防重叠闸门:用户多时单轮刷新(逐个查库+推送)可能超过 30 秒,
+  // setInterval 不等上轮回调,不设闸门会造成推送堆积、触发 TG 限流
+  let refreshRunning = false;
   const refreshTimer = setInterval(async () => {
+    if (refreshRunning) return;
+    refreshRunning = true;
     try {
       const activeUsers = panelContextDao.getActiveUsers('dashboard');
       for (const userId of activeUsers) {
@@ -217,6 +222,8 @@ async function main() {
       }
     } catch (err) {
       logger.warn(`[BOOT] 定时刷新面板异常: ${err.message}`);
+    } finally {
+      refreshRunning = false;
     }
   }, 30000); // 30 秒刷新一次
   if (refreshTimer.unref) refreshTimer.unref();

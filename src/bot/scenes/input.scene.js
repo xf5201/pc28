@@ -40,20 +40,6 @@ const FIELD_CONFIG = {
     parse: (value) => parseInt(value, 10),
     format: (value) => `${value}`,
   },
-
-  cut_off_seconds: {
-    label: '封盘时间',
-    prompt: '请输入封盘时间（秒，非负整数，例如：5、10、15、20）',
-    validate: (value) => {
-      const num = parseInt(value, 10);
-      if (isNaN(num) || String(num) !== value.trim()) return '请输入有效的非负整数';
-      if (num < 0) return '封盘时间不能为负数';
-      if (num > 120) return '封盘时间不能超过 120 秒';
-      return null;
-    },
-    parse: (value) => parseInt(value, 10),
-    format: (value) => `${value}秒`,
-  },
 };
 
 const inputScene = new Scenes.WizardScene(

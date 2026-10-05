@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS strategy_config (
                        CHECK(play_type IN ('顺龙','反龙','顺2反龙','反2顺龙')), -- 【已更新】删除小刚，新增顺2反龙/反2顺龙
     base_bet           INTEGER NOT NULL CHECK(base_bet > 0),
     martingale_ratio   REAL NOT NULL CHECK(martingale_ratio >= 1.0),
-    cut_off_seconds    INTEGER NOT NULL CHECK(cut_off_seconds >= 0),
     is_running         INTEGER NOT NULL DEFAULT 0
                        CHECK(is_running IN (0,1)),
     current_direction  TEXT NULL,
@@ -77,6 +76,10 @@ CREATE TABLE IF NOT EXISTS open_results (
 
 CREATE INDEX IF NOT EXISTS idx_open_results_open_time ON open_results(open_time);
 CREATE INDEX IF NOT EXISTS idx_open_results_period ON open_results(period);
+-- 期号序号表达式索引:补录对账(getByTerm/getMaxTerm/getAllTerms)专用,
+-- 避免随数据量增长的全表扫描
+CREATE INDEX IF NOT EXISTS idx_open_results_term
+  ON open_results(CAST(substr(period, instr(period, '-') + 1) AS INTEGER));
 
 -- ═══════════════════════════════════════════
 -- 4.6 bet_records（下注记录）

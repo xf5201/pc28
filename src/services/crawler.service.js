@@ -43,6 +43,12 @@ class CrawlerService {
     this._lastInterval = null;
     this._nextWakeAt = 0;
     this._missCount = 0;
+    this._lastPruneAt = 0;
+
+    // open_results 保留天数:必须大于数据源可回溯的补录窗口(约 24 天)
+    this.retentionDays = deps.retentionDays || 35;
+    // 清理频率(毫秒):6 小时一次
+    this.pruneIntervalMs = deps.pruneIntervalMs || 6 * 3600 * 1000;
   }
 
   start() {
@@ -111,8 +117,9 @@ class CrawlerService {
 
     const maxTerm = openResultDao.getMaxTerm();
     // 用 term 集合判断缺失，而不是只看 maxTerm：
-    // 停机重启后本地数据可能出现中间空洞，只补 "> maxTerm" 永远填不上
-    const localTerms = openResultDao.getAllTerms();
+    // 停机重启后本地数据可能出现中间空洞，只补 "> maxTerm" 永远填不上。
+    // 只关心数据源窗口内的 term（>= 最早可补录期），避免全量扫描
+    const localTerms = openResultDao.getAllTerms(list[0].term);
     const missing = list
       .filter((p) => !localTerms.has(p.term))
       .sort((a, b) => a.term - b.term);
@@ -181,10 +188,12 @@ class CrawlerService {
     // 统一补录对账结算：按 term 匹配所有 SENT/PENDING 下注
     // （涵盖刚补录的期次、本地已有结果但漏结算的期次、以及
     //   期号字符串不一致的历史遗留注单）
+    let unresolved = [];
     try {
-      const { settled, unresolved } = await this.settlementService.settleBacklog();
-      if (settled > 0) {
-        logger.info(`[CRAWLER] 补录结算: 本轮共结算 ${settled} 条`);
+      const backlog = await this.settlementService.settleBacklog();
+      unresolved = backlog.unresolved;
+      if (backlog.settled > 0) {
+        logger.info(`[CRAWLER] 补录结算: 本轮共结算 ${backlog.settled} 条`);
       }
       if (unresolved.length > 0) {
         logger.warn(
@@ -196,9 +205,12 @@ class CrawlerService {
       logger.error(`[CRAWLER] 补录对账结算异常: ${error.message}`, error);
     }
 
-    // 兜底撤单：期号早于数据源最早可补录期的未结算注单，
+    // 兜底撤单：对账后仍无结果的注单中，期号早于数据源最早可补录期的，
     // 其开奖结果已永远拿不到，继续悬挂只会永久占用"待结算"状态
-    this._cancelUnsettleableBets(list[0].term);
+    this._cancelUnsettleableBets(list[0].term, unresolved);
+
+    // 保留策略：按频率清理过早的开奖记录，防止 open_results 无限膨胀
+    this._pruneOldResults();
 
     const latest = list[list.length - 1];
     this._scheduleNext(latest.openTimeMs, interval);
@@ -209,17 +221,16 @@ class CrawlerService {
    *
    * @private
    * @param {number} earliestFetchableTerm - 数据源 API 返回的最早一期序号
+   * @param {Array<object>} unresolved - 本轮对账后仍无开奖结果的注单
    */
-  _cancelUnsettleableBets(earliestFetchableTerm) {
+  _cancelUnsettleableBets(earliestFetchableTerm, unresolved = []) {
     if (!Number.isFinite(earliestFetchableTerm)) return;
 
     try {
-      const stale = betRecordDao
-        .listAllPending()
-        .filter((b) => {
-          const t = termOf(b.period);
-          return t !== null && t < earliestFetchableTerm;
-        });
+      const stale = unresolved.filter((b) => {
+        const t = termOf(b.period);
+        return t !== null && t < earliestFetchableTerm;
+      });
 
       for (const bet of stale) {
         const reason = `停机过久：期号早于数据源最早可补录期（${earliestFetchableTerm}），开奖结果无法获取，已撤单`;
@@ -235,6 +246,25 @@ class CrawlerService {
       }
     } catch (error) {
       logger.error(`[CRAWLER] 超范围注单撤单失败: ${error.message}`, error);
+    }
+  }
+
+  /**
+   * 清理过期的开奖记录（保留策略，按 pruneIntervalMs 节流）
+   * @private
+   */
+  _pruneOldResults() {
+    const now = Date.now();
+    if (now - this._lastPruneAt < this.pruneIntervalMs) return;
+    this._lastPruneAt = now;
+
+    try {
+      const pruned = openResultDao.pruneBeforeDays(this.retentionDays);
+      if (pruned > 0) {
+        logger.info(`[CRAWLER] 保留策略: 已清理 ${pruned} 条超过 ${this.retentionDays} 天的开奖记录`);
+      }
+    } catch (error) {
+      logger.error(`[CRAWLER] 开奖记录清理失败: ${error.message}`, error);
     }
   }
 

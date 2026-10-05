@@ -7,7 +7,10 @@ const { getConnection } = require('./connection');
  * 文档参考：§4.4
  *
  * 字段：mode / play_type / base_bet / martingale_ratio
- *       cut_off_seconds / is_running / current_direction / consecutive_losses
+ *       is_running / current_direction / consecutive_losses
+ *
+ * 注:封盘秒数(cut_off_seconds)已移除(2026-10-05,迁移 001),
+ * 封盘校验统一使用固定值,见 strategy-executor.service.js 的 CUT_OFF_SECONDS。
  */
 
 const strategyConfigDao = {
@@ -29,26 +32,25 @@ const strategyConfigDao = {
     const db = getConnection();
     db.prepare(`
       INSERT INTO strategy_config
-        (bot_user_id, mode, play_type, base_bet, martingale_ratio, cut_off_seconds)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (bot_user_id, mode, play_type, base_bet, martingale_ratio)
+      VALUES (?, ?, ?, ?, ?)
     `).run(
       data.bot_user_id,
       data.mode || '2.84',
       data.play_type || '顺龙',
       data.base_bet || 100,
-      data.martingale_ratio || 2.0,
-      data.cut_off_seconds || 10
+      data.martingale_ratio || 2.0
     );
   },
 
   /**
    * 更新配置字段（部分更新）
    * @param {string} botUserId
-   * @param {object} fields - { mode?, play_type?, base_bet?, martingale_ratio?, cut_off_seconds? }
+   * @param {object} fields - { mode?, play_type?, base_bet?, martingale_ratio? }
    */
   updateConfig(botUserId, fields) {
     const db = getConnection();
-    const allowed = ['mode', 'play_type', 'base_bet', 'martingale_ratio', 'cut_off_seconds'];
+    const allowed = ['mode', 'play_type', 'base_bet', 'martingale_ratio'];
     const sets = [];
     const values = [];
 

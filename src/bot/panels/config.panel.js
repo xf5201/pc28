@@ -9,7 +9,6 @@ class ConfigPanel {
       case 'mode': return this.buildModeSelect(data);
       case 'martingale': return this.buildMartingaleSelect(data);
       case 'base_bet': return this.buildBaseBetSelect(data);
-      case 'cut_off': return this.buildCutOffSelect(data);
       case 'main':
       default: return this.buildMain(data);
     }
@@ -22,7 +21,6 @@ class ConfigPanel {
       text += `💡 模式：${strategy.mode}\n`;
       text += `💰 初始下注：${strategy.base_bet}\n`;
       text += `📈 倍投比例：${strategy.martingale_ratio}x\n`;
-      text += `⏱ 封盘：${strategy.cut_off_seconds}秒\n`;
     } else {
       text += '暂无配置，请先登录账号\n';
     }
@@ -34,8 +32,7 @@ class ConfigPanel {
         [Markup.button.callback('🎲 修改玩法', 'config:play_type')],
         [Markup.button.callback('💡 修改模式', 'config:mode')],
         [Markup.button.callback('💰 修改初始下注', 'config:base_bet')],
-        [Markup.button.callback('📈 修改倍投比例', 'config:martingale')],
-        [Markup.button.callback('⏱ 修改封盘时间', 'config:cut_off')]
+        [Markup.button.callback('📈 修改倍投比例', 'config:martingale')]
       );
     }
     buttons.push([Markup.button.callback('🔙 返回主菜单', 'dashboard:refresh')]);
@@ -86,19 +83,6 @@ class ConfigPanel {
       [Markup.button.callback('10', 'config:set_base_bet:10'), Markup.button.callback('50', 'config:set_base_bet:50')],
       [Markup.button.callback('100', 'config:set_base_bet:100'), Markup.button.callback('500', 'config:set_base_bet:500')],
       [Markup.button.callback('🔢 自定义', 'config:custom_input:base_bet')],
-      [Markup.button.callback('🔙 返回', 'config:main')],
-    ];
-    return { text, keyboard: Markup.inlineKeyboard(buttons) };
-  }
-
-  static buildCutOffSelect({ strategy }) {
-    let text = '⏱ <b>修改封盘时间</b>\n━━━━━━━━━━━━━━━━━━━━\n';
-    if (strategy) text += `当前：${strategy.cut_off_seconds}秒\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    const buttons = [
-      [Markup.button.callback('5秒', 'config:set_cut_off:5'), Markup.button.callback('10秒', 'config:set_cut_off:10')],
-      [Markup.button.callback('15秒', 'config:set_cut_off:15'), Markup.button.callback('20秒', 'config:set_cut_off:20')],
-      [Markup.button.callback('🔢 自定义', 'config:custom_input:cut_off_seconds')],
       [Markup.button.callback('🔙 返回', 'config:main')],
     ];
     return { text, keyboard: Markup.inlineKeyboard(buttons) };

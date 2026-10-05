@@ -12,13 +12,11 @@ class ConfigHandler {
       case 'mode': await this.handleModeSelect(ctx, botUserId, { panelRenderer }); break;
       case 'martingale': await this.handleMartingaleSelect(ctx, botUserId, { panelRenderer }); break;
       case 'base_bet': await this.handleBaseBetSelect(ctx, botUserId, { panelRenderer }); break;
-      case 'cut_off': await this.handleCutOffSelect(ctx, botUserId, { panelRenderer }); break;
 
       case 'set_play_type': await this.handleSetConfig(ctx, botUserId, 'play_type', params[0], { panelRenderer, services }); break;
       case 'set_mode': await this.handleSetConfig(ctx, botUserId, 'mode', params[0], { panelRenderer, services }); break;
       case 'set_martingale': await this.handleSetConfig(ctx, botUserId, 'martingale_ratio', parseFloat(params[0]), { panelRenderer, services }); break;
       case 'set_base_bet': await this.handleSetConfig(ctx, botUserId, 'base_bet', parseInt(params[0], 10), { panelRenderer, services }); break;
-      case 'set_cut_off': await this.handleSetConfig(ctx, botUserId, 'cut_off_seconds', parseInt(params[0], 10), { panelRenderer, services }); break;
 
       case 'custom_input': await this.handleCustomInput(ctx, botUserId, params[0], { panelRenderer }); break;
 
@@ -51,11 +49,6 @@ class ConfigHandler {
   static async handleBaseBetSelect(ctx, botUserId, { panelRenderer }) {
     const strategy = await strategyConfigDao.getById(botUserId);
     await panelRenderer.render(ctx, 'config', { subPanel: 'base_bet', strategy });
-  }
-
-  static async handleCutOffSelect(ctx, botUserId, { panelRenderer }) {
-    const strategy = await strategyConfigDao.getById(botUserId);
-    await panelRenderer.render(ctx, 'config', { subPanel: 'cut_off', strategy });
   }
 
   static async handleSetConfig(ctx, botUserId, field, value, { panelRenderer, services }) {
@@ -104,11 +97,6 @@ class ConfigHandler {
       case 'base_bet': {
         const base = Number(value);
         if (!Number.isInteger(base) || base <= 0) throw new Error('初始下注金额必须为正整数');
-        break;
-      }
-      case 'cut_off_seconds': {
-        const secs = Number(value);
-        if (!Number.isInteger(secs) || secs < 0) throw new Error('封盘秒数必须为非负整数');
         break;
       }
       default:

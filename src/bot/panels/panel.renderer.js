@@ -9,7 +9,6 @@ const PANEL_ALIAS = {
   config_play_type:      { file: 'config',      subPanel: 'play_type' },
   config_mode:           { file: 'config',      subPanel: 'mode' },
   config_martingale:     { file: 'config',      subPanel: 'martingale' },
-  config_cut_off:        { file: 'config',      subPanel: 'cut_off' },
   target_chat_config:    { file: 'target-chat', subPanel: 'config' },
   target_chat_list:      { file: 'target-chat', subPanel: 'list' },
   target_chat_success:   { file: 'target-chat', subPanel: 'success' },

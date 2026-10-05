@@ -35,7 +35,6 @@ class DashboardPanel {
       text += `🔢 初始下注：${strategy.base_bet}\n`;
       text += `🔄 连挂：${strategy.consecutive_losses}\n`;
       text += `💡 模式：${strategy.mode}\n`;
-      text += `⏱ 封盘：${strategy.cut_off_seconds}秒\n`;
     }
 
     text += '━━━━━━━━━━━━━━━━━━━━\n';
