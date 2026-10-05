@@ -8,6 +8,32 @@ const OPPOSITE = { BIG: 'SMALL', SMALL: 'BIG', ODD: 'EVEN', EVEN: 'ODD' };
 const MODES = { FOLLOW: 'FOLLOW', REVERSE: 'REVERSE' };
 const SWITCH_THRESHOLD = 2;
 
+/**
+ * 玩法说明（面板展示用）
+ *
+ * short: 配置主面板里跟在玩法名后的一句话提示
+ * detail: 玩法选择面板里的完整说明
+ * 所有玩法均以上一期开奖的「大小」（组合方向第一段）为参照
+ */
+const PLAY_TYPE_INFO = {
+  顺龙: {
+    short: '跟着上期买',
+    detail: '上期开大→买大，上期开小→买小',
+  },
+  反龙: {
+    short: '反着上期买',
+    detail: '上期开大→买小，上期开小→买大',
+  },
+  顺2反龙: {
+    short: '先顺后反·连输2把翻转',
+    detail: '开局顺着买，每连输满 2 把翻转一次（顺↔反），循环往复',
+  },
+  反2顺龙: {
+    short: '先反后顺·连输2把翻转',
+    detail: '开局反着买，每连输满 2 把翻转一次（反↔顺），循环往复',
+  },
+};
+
 function calcDirection(lastDir, playType, losses, currDir) {
   switch (playType) {
     case '顺龙': return calcShunLong(lastDir);
@@ -135,7 +161,7 @@ function isValidDirection(direction) { return Object.values(DIRECTIONS).includes
 function isValidPlayType(playType) { return ['顺龙', '反龙', '顺2反龙', '反2顺龙'].includes(playType); }
 
 module.exports = {
-  DIRECTIONS, OPPOSITE, MODES,
+  DIRECTIONS, OPPOSITE, MODES, PLAY_TYPE_INFO,
   calcDirection, calcNextState, calcAmount, checkWin, initialModeFor,
   getDirectionLabel, isValidDirection, isValidPlayType,
 };

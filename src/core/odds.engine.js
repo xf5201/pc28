@@ -42,6 +42,25 @@ const ODDS_TABLE = {
 };
 
 /**
+ * 赔率模式说明（面板展示用）
+ *
+ * short: 配置主面板里跟在模式名后的一句话提示
+ * detail: 模式选择面板里的完整说明
+ * 回本规则与 number.attributes.isRebateNumber 保持一致：
+ *   2.17 → 仅和值 13/14 回本；2.84 → 豹子/对子/顺子/13/14 均回本
+ */
+const MODE_INFO = {
+  '2.17': {
+    short: '低赔率·回本少',
+    detail: '押中得 2.17 倍本金（净赚 1.17 倍）；仅开出 13 点 / 14 点时按回本处理',
+  },
+  '2.84': {
+    short: '高赔率·回本多',
+    detail: '押中得 2.84 倍本金（净赚 1.84 倍）；开出豹子 / 对子 / 顺子 / 13 点 / 14 点均按回本处理',
+  },
+};
+
+/**
  * 获取赔率
  *
  * @param {string} mode - 赔率模式：'2.17' | '2.84'
@@ -117,4 +136,5 @@ module.exports = {
   calcProfitLoss,
   isValidMode,
   ODDS_TABLE,
+  MODE_INFO,
 };

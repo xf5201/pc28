@@ -1,6 +1,8 @@
 // src/bot/panels/dashboard.panel.js
 const { Markup } = require('telegraf');
 const { maskPhone } = require('../../utils/mask.util');
+const { PLAY_TYPE_INFO } = require('../../core/strategy.engine');
+const { MODE_INFO } = require('../../core/odds.engine');
 
 /**
  * 主面板（DashboardPanel）
@@ -29,12 +31,14 @@ class DashboardPanel {
     text += `🎯 下注群：${account.target_chat_title || '未配置'}\n`;
 
     if (strategy) {
+      const playInfo = PLAY_TYPE_INFO[strategy.play_type];
+      const modeInfo = MODE_INFO[strategy.mode];
       text += `📌 策略：${strategy.is_running ? '🟢 运行中' : '🔴 已停止'}\n`;
-      text += `🎲 玩法：${strategy.play_type}\n`;
+      text += `🎲 玩法：${strategy.play_type}${playInfo ? `（${playInfo.short}）` : ''}\n`;
       text += `📈 倍投：${strategy.martingale_ratio}x\n`;
       text += `🔢 初始下注：${strategy.base_bet}\n`;
       text += `🔄 连挂：${strategy.consecutive_losses}\n`;
-      text += `💡 模式：${strategy.mode}\n`;
+      text += `💡 模式：${strategy.mode}${modeInfo ? `（${modeInfo.short}）` : ''}\n`;
     }
 
     text += '━━━━━━━━━━━━━━━━━━━━\n';

@@ -1,5 +1,7 @@
 // src/bot/panels/config.panel.js
 const { Markup } = require('telegraf');
+const { PLAY_TYPE_INFO } = require('../../core/strategy.engine');
+const { MODE_INFO } = require('../../core/odds.engine');
 
 class ConfigPanel {
   static async render(ctx, data) {
@@ -17,8 +19,10 @@ class ConfigPanel {
   static buildMain({ strategy }) {
     let text = '⚙️ <b>策略配置</b>\n━━━━━━━━━━━━━━━━━━━━\n当前配置：\n';
     if (strategy) {
-      text += `🎲 玩法：${strategy.play_type}\n`;
-      text += `💡 模式：${strategy.mode}\n`;
+      const playInfo = PLAY_TYPE_INFO[strategy.play_type];
+      const modeInfo = MODE_INFO[strategy.mode];
+      text += `🎲 玩法：${strategy.play_type}${playInfo ? `（${playInfo.short}）` : ''}\n`;
+      text += `💡 模式：${strategy.mode}${modeInfo ? `（${modeInfo.short}）` : ''}\n`;
       text += `💰 初始下注：${strategy.base_bet}\n`;
       text += `📈 倍投比例：${strategy.martingale_ratio}x\n`;
     } else {
@@ -43,6 +47,12 @@ class ConfigPanel {
     let text = '🎲 <b>选择玩法</b>\n━━━━━━━━━━━━━━━━━━━━\n';
     if (strategy) text += `当前：${strategy.play_type}\n`;
     text += '━━━━━━━━━━━━━━━━━━━━\n';
+    text += '📖 所有玩法都根据<b>上一期开奖的大小</b>决定下注方向：\n\n';
+    for (const [name, info] of Object.entries(PLAY_TYPE_INFO)) {
+      text += `🔹 <b>${name}</b>（${info.short}）\n${info.detail}\n\n`;
+    }
+    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    text += '💰 金额 = 基础注 × 倍投比例 ^ 连挂数\n连输越多买越大，赢一把回到基础注';
     const buttons = [
       [Markup.button.callback('顺龙', 'config:set_play_type:顺龙'), Markup.button.callback('反龙', 'config:set_play_type:反龙')],
       [Markup.button.callback('顺2反龙', 'config:set_play_type:顺2反龙'), Markup.button.callback('反2顺龙', 'config:set_play_type:反2顺龙')],
@@ -55,6 +65,12 @@ class ConfigPanel {
     let text = '💡 <b>选择赔率模式</b>\n━━━━━━━━━━━━━━━━━━━━\n';
     if (strategy) text += `当前：${strategy.mode}\n`;
     text += '━━━━━━━━━━━━━━━━━━━━\n';
+    text += '📖 押中方向后按本金倍数返奖，特殊号码按回本处理：\n\n';
+    for (const [name, info] of Object.entries(MODE_INFO)) {
+      text += `🔹 <b>${name}</b>（${info.short}）\n${info.detail}\n\n`;
+    }
+    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    text += '💡 回本 = 不盈不亏，连挂计数保持不变';
     const buttons = [
       [Markup.button.callback('2.17', 'config:set_mode:2.17'), Markup.button.callback('2.84', 'config:set_mode:2.84')],
       [Markup.button.callback('🔙 返回', 'config:main')],
