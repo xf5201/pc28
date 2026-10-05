@@ -173,6 +173,46 @@ class SessionManager {
   }
 
   /**
+   * 解析群/频道的真实标题
+   *
+   * GramJS 用裸 ID 查询实体时,若该 peer 不在会话缓存里会直接抛错
+   * (历史遗留:配置下注群时解析失败静默回退,导致 title 存了群 ID)。
+   * 因此这里做两级尝试:
+   *   1. getEntity 直接解析
+   *   2. 拉取会话列表按 ID 匹配(会话列表自带实体缓存)
+   *
+   * @param {string} botUserId
+   * @param {string} chatId - 如 "-1002751172376"
+   * @returns {Promise<string|null>} 解析失败返回 null
+   */
+  async resolveChatTitle(botUserId, chatId) {
+    const client = this.getClient(botUserId);
+    if (!client || !chatId) return null;
+
+    // 1) 直接解析
+    try {
+      const entity = await client.getEntity(String(chatId));
+      if (entity && entity.title) return entity.title;
+    } catch (_) { /* 落入会话列表兜底 */ }
+
+    // 2) 会话列表兜底:遍历已加入的群/频道匹配 ID
+    try {
+      const dialogs = await client.getDialogs({ limit: 200 });
+      const target = String(chatId);
+      const bare = target.replace(/^-100/, '').replace(/^-/, '');
+      const hit = dialogs.find((d) => {
+        const id = d.id ? String(d.id) : '';
+        return id === target || id === bare || id === '-100' + bare;
+      });
+      if (hit && (hit.title || hit.name)) return hit.title || hit.name;
+    } catch (error) {
+      logger.warn(`[SESSION] 用户 ${botUserId} 会话列表兜底解析失败: ${error.message}`);
+    }
+
+    return null;
+  }
+
+  /**
    * 获取所有已连接的 Client 数量
    * @returns {number}
    */

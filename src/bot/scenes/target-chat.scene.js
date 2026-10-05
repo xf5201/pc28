@@ -91,20 +91,21 @@ const targetChatScene = new Scenes.WizardScene(
         return ctx.scene.leave();
       }
 
-      // 尝试获取群标题（通过 TG Client）
+      // 解析群标题（getEntity + 会话列表两级兜底；仍失败则用 ID 占位）
       let chatTitle = chatId;
       try {
-        const client = ctx.services.session.getClient(botUserId);
-        if (client) {
-          const chat = await client.getChat(numericId);
-          chatTitle = chat.title || chatId;
+        const title = await ctx.services.session.resolveChatTitle(botUserId, chatId);
+        if (title) {
+          chatTitle = title;
+        } else {
+          logger.warn(
+            `[TARGET_CHAT_SCENE] 用户 ${botUserId} 群标题解析失败，暂以 ID 代替: ${chatId}`
+          );
         }
       } catch (fetchError) {
         logger.warn(
           `[TARGET_CHAT_SCENE] 用户 ${botUserId} 获取群信息失败: ${fetchError.message}`
         );
-        // 获取失败不影响配置流程，使用 ID 作为标题
-        chatTitle = chatId;
       }
 
       // 调用 account.service 更新下注群

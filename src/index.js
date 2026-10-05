@@ -236,6 +236,29 @@ async function main() {
   logger.info(`[BOOT] Session 恢复完成，活跃连接: ${sessionManager.getActiveCount()}`);
 
   // ═══════════════════════════════════════════
+  // 6.5 下注群名称自愈
+  // 历史配置可能只存了群 ID（旧版标题解析失败时静默回退），
+  // 启动时对"标题是纯数字"的活跃账号补全真实群名
+  // ═══════════════════════════════════════════
+  try {
+    const activeAccounts = accountDao.getAllActive();
+    for (const acct of activeAccounts) {
+      const storedTitle = String(acct.target_chat_title || '');
+      if (acct.target_chat_id && /^-?\d+$/.test(storedTitle)) {
+        const resolved = await sessionManager.resolveChatTitle(acct.bot_user_id, acct.target_chat_id);
+        if (resolved) {
+          await accountService.updateTargetChat(acct.bot_user_id, acct.target_chat_id, resolved);
+          logger.info(`[BOOT] 下注群名称已补全: 用户=${acct.bot_user_id}, ${storedTitle} → ${resolved}`);
+        } else {
+          logger.warn(`[BOOT] 下注群名称解析失败（仍显示 ID）: 用户=${acct.bot_user_id}, ${acct.target_chat_id}`);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error(`[BOOT] 下注群名称自愈失败: ${error.message}`, error);
+  }
+
+  // ═══════════════════════════════════════════
   // 7. 恢复策略状态（is_running = 1）
   // ═══════════════════════════════════════════
   const runningStrategies = strategyConfigDao.getAllRunning();

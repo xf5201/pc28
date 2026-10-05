@@ -304,6 +304,7 @@ pm2 monit                    # 资源监控
 - **refactor(config) 移除封盘时间配置**:策略配置面板删除「修改封盘时间」入口(面板、处理器、输入场景、DAO 同步移除),封盘秒数固定为 10 秒(`strategy_config.cut_off_seconds` 列已通过迁移 001 删除)。
 - **feat(bot) 面板玩法说明**:策略配置的玩法/赔率模式选择面板展示完整规则说明(顺龙/反龙/顺2反龙/反2顺龙的下注逻辑与翻转时机、两种赔率的返奖倍数与回本号码),配置主面板与仪表盘在玩法/模式后附一句话提示;说明文案统一定义在 `strategy.engine.PLAY_TYPE_INFO` 与 `odds.engine.MODE_INFO`。
 - **style(bot) 全面板等宽账本风改版**:所有面板(仪表盘/配置/账号/登录/下注群/报表/日志/确认/输入场景)弃用粗横线分隔,统一改为 `<pre>` 等宽账本块(┌/│/└ 框线 + CJK 宽度感知列对齐);长篇说明收进可折叠引用块(`blockquote expandable`,点击展开);排版工具集中于 `utils/ledger.util.js`。
+- **fix(bot) 下注群显示群名而非 ID**:GramJS 用裸 ID 解析实体时若 peer 不在会话缓存会失败,旧版失败后静默用 ID 充当标题。现改为 `getEntity` + 会话列表匹配两级解析(`session.manager.resolveChatTitle`),手动输入群 ID 与列表选择两条配置路径统一使用;启动时对历史"标题为纯数字"的账号自动补全真实群名。
 - **docs** 新增完整 README(架构、部署、玩法、生命周期、运维、排查),并随每次变更持续更新。
 
 

@@ -123,17 +123,17 @@ class TargetChatHandler {
         return;
       }
 
-      // 尝试获取群标题
-      let chatTitle = '未知群组';
+      // 解析群标题（getEntity + 会话列表两级兜底；仍失败则用 ID 占位）
+      let chatTitle = chatId;
       try {
-        const client = services.session.getClient(botUserId);
-        if (client) {
-          const chat = await client.getChat(chatId);
-          chatTitle = chat.title || chatId;
+        const title = await services.session.resolveChatTitle(botUserId, chatId);
+        if (title) {
+          chatTitle = title;
+        } else {
+          logger.warn(`[TARGET_CHAT] 用户 ${botUserId} 群标题解析失败，暂以 ID 代替: ${chatId}`);
         }
-      } catch (_) {
-        // 无法获取标题时使用 ID
-        chatTitle = chatId;
+      } catch (error) {
+        logger.warn(`[TARGET_CHAT] 用户 ${botUserId} 获取群标题失败: ${error.message}`);
       }
 
       // 调用 service 更新下注群
