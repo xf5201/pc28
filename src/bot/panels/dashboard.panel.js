@@ -3,6 +3,7 @@ const { Markup } = require('telegraf');
 const { maskPhone } = require('../../utils/mask.util');
 const { PLAY_TYPE_INFO } = require('../../core/strategy.engine');
 const { MODE_INFO } = require('../../core/odds.engine');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 主面板（DashboardPanel）
@@ -16,32 +17,34 @@ class DashboardPanel {
   }
 
   static buildText({ user, account, strategy }) {
-    let text = '🎲 <b>PC28 自动化助手</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += `👤 用户：@${user.username || user.id}\n`;
+    let text = '🎲 <b>PC28 自动化助手</b>\n\n';
+
+    const rows = [{ label: '用户', value: '@' + (user.username || user.id) }];
 
     if (!account) {
-      text += '🤖 账号：🔴 未登录\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
+      rows.push({ label: '账号', value: '🔴 未登录' });
+      rows.push({ text: '点击下方按钮登录执行账号' });
+      text += ledger.box('账号 · 策略', rows);
       return text;
     }
 
-    text += `📱 账号：${maskPhone(account.phone)}\n`;
-    text += `🤖 状态：${this.statusIcon(account.status)} ${this.statusText(account.status)}\n`;
-    text += `🎯 下注群：${account.target_chat_title || '未配置'}\n`;
+    rows.push({ label: '手机', value: maskPhone(account.phone) });
+    rows.push({ label: '状态', value: `${this.statusIcon(account.status)} ${this.statusText(account.status)}` });
+    rows.push({ label: '下注群', value: account.target_chat_title || '未配置' });
 
     if (strategy) {
       const playInfo = PLAY_TYPE_INFO[strategy.play_type];
       const modeInfo = MODE_INFO[strategy.mode];
-      text += `📌 策略：${strategy.is_running ? '🟢 运行中' : '🔴 已停止'}\n`;
-      text += `🎲 玩法：${strategy.play_type}${playInfo ? `（${playInfo.short}）` : ''}\n`;
-      text += `📈 倍投：${strategy.martingale_ratio}x\n`;
-      text += `🔢 初始下注：${strategy.base_bet}\n`;
-      text += `🔄 连挂：${strategy.consecutive_losses}\n`;
-      text += `💡 模式：${strategy.mode}${modeInfo ? `（${modeInfo.short}）` : ''}\n`;
+      rows.push({ blank: true });
+      rows.push({ label: '策略', value: strategy.is_running ? '🟢 运行中' : '🔴 已停止' });
+      rows.push({ label: '玩法', value: strategy.play_type + (playInfo ? ` · ${playInfo.short}` : '') });
+      rows.push({ label: '模式', value: strategy.mode + (modeInfo ? ` · ${modeInfo.short}` : '') });
+      rows.push({ label: '基础注', value: String(strategy.base_bet) });
+      rows.push({ label: '倍投', value: `${strategy.martingale_ratio}x` });
+      rows.push({ label: '连挂', value: String(strategy.consecutive_losses) });
     }
 
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    text += ledger.box('账号 · 策略', rows);
     return text;
   }
 

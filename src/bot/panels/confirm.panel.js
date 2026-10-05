@@ -1,5 +1,6 @@
 // src/bot/panels/confirm.panel.js
 const { Markup } = require('telegraf');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 确认对话框面板（ConfirmPanel）
@@ -36,10 +37,10 @@ class ConfirmPanel {
     }
 
     // 自定义文本
-    let text = `⚠️ <b>${title || '确认操作'}</b>\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += `${message || '确定要执行此操作吗？'}\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = `⚠️ <b>${title || '确认操作'}</b>\n\n`;
+    text += ledger.box('确认', [
+      { text: message || '确定要执行此操作吗？' },
+    ]);
     return text;
   }
 
@@ -47,17 +48,15 @@ class ConfirmPanel {
    * 7.7 删除账号确认
    */
   static buildDeleteAccountText() {
-    let text = '⚠️ <b>删除执行账号</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += '确定要删除执行账号吗？\n\n';
-    text += '此操作会删除：\n';
-    text += '• TG Session\n';
-    text += '• 下注记录\n';
-    text += '• 盈亏记录\n';
-    text += '• 策略配置\n';
-    text += '• 操作日志\n\n';
-    text += '⛔ 此操作不可恢复！\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = '⚠️ <b>删除执行账号</b>\n\n';
+    text += ledger.box('此操作会删除', [
+      { text: '· TG Session' },
+      { text: '· 下注记录' },
+      { text: '· 盈亏记录' },
+      { text: '· 策略配置' },
+      { text: '· 操作日志' },
+    ]);
+    text += '\n⛔ 此操作不可恢复！';
     return text;
   }
 
@@ -65,10 +64,8 @@ class ConfirmPanel {
    * 通用确认文本
    */
   static buildGenericText() {
-    let text = '⚠️ <b>确认操作</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += '确定要执行此操作吗？\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = '⚠️ <b>确认操作</b>\n\n';
+    text += ledger.box('确认', [{ text: '确定要执行此操作吗？' }]);
     return text;
   }
 

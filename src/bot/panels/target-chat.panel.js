@@ -1,5 +1,6 @@
 // src/bot/panels/target-chat.panel.js
 const { Markup } = require('telegraf');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 下注群配置面板（TargetChatPanel）
@@ -34,16 +35,15 @@ class TargetChatPanel {
   // ── 7.6.1 选择方式 ──
 
   static buildConfig({ account }) {
-    let text = '🎯 <b>下注群配置</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = '🎯 <b>下注群配置</b>\n\n';
 
+    const rows = [];
     if (account && account.target_chat_title) {
-      text += `当前下注群：${account.target_chat_title}\n`;
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
+      rows.push({ label: '当前群', value: account.target_chat_title });
     }
-
-    text += '请选择配置方式\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    rows.push({ label: '要求', value: '执行账号须在群内' });
+    rows.push({ label: '动作', value: '选择下方配置方式' });
+    text += ledger.box('下注群', rows);
 
     const buttons = [
       [Markup.button.callback('📋 从列表选择', 'target_chat:list')],
@@ -57,8 +57,7 @@ class TargetChatPanel {
   // ── 7.6.2 从列表选择 ──
 
   static buildList({ groups }) {
-    let text = '📋 <b>选择下注群</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = '📋 <b>选择下注群</b>\n\n';
 
     const buttons = [];
 
@@ -72,10 +71,8 @@ class TargetChatPanel {
         ]);
       }
     } else {
-      text += '暂无可用群组\n';
+      text += ledger.box('可用群组', [{ text: '暂无可用群组' }]);
     }
-
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
 
     buttons.push(
       [Markup.button.callback('🔄 刷新列表', 'target_chat:refresh_list')],
@@ -88,11 +85,11 @@ class TargetChatPanel {
   // ── 7.6.3 配置成功 ──
 
   static buildSuccess({ chatId, chatTitle }) {
-    let text = '✅ <b>下注群配置成功</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += `群名称：${chatTitle || '未知'}\n`;
-    text += `群 ID：${chatId || '未知'}\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = '✅ <b>下注群配置成功</b>\n\n';
+    text += ledger.box('下注群', [
+      { label: '群名称', value: chatTitle || '未知' },
+      { label: '群 ID', value: chatId || '未知' },
+    ]);
 
     const buttons = [
       [Markup.button.callback('🏠 返回主菜单', 'dashboard:refresh')],

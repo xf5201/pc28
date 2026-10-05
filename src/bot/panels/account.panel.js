@@ -1,6 +1,7 @@
 // src/bot/panels/account.panel.js
 const { Markup } = require('telegraf');
 const { maskPhone } = require('../../utils/mask.util');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 账号状态面板（AccountPanel）
@@ -20,29 +21,32 @@ class AccountPanel {
   }
 
   static buildText({ account, strategy }) {
-    let text = '👤 <b>账号信息</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = '👤 <b>账号信息</b>\n\n';
 
     if (!account) {
-      text += '🤖 状态：🔴 未登录\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
+      text += ledger.box('账号', [
+        { label: '状态', value: '🔴 未登录' },
+        { text: '点击下方按钮登录执行账号' },
+      ]);
       return text;
     }
 
-    text += `📱 手机号：${maskPhone(account.phone)}\n`;
-    text += `🤖 状态：${this.statusIcon(account.status)} ${this.statusText(account.status)}\n`;
-    text += `🎯 下注群：${account.target_chat_title || '未配置'}\n`;
-    text += `📅 注册时间：${this.formatDate(account.created_at)}\n`;
+    const rows = [
+      { label: '手机', value: maskPhone(account.phone) },
+      { label: '状态', value: `${this.statusIcon(account.status)} ${this.statusText(account.status)}` },
+      { label: '下注群', value: account.target_chat_title || '未配置' },
+      { label: '注册', value: this.formatDate(account.created_at) },
+    ];
 
     if (account.status === 'ERROR' && account.last_error) {
-      text += `⚠️ 错误信息：${account.last_error}\n`;
+      rows.push({ label: '错误', value: account.last_error });
     }
-
     if (strategy) {
-      text += `📌 策略状态：${strategy.is_running ? '🟢 运行中' : '🔴 已停止'}\n`;
+      rows.push({ blank: true });
+      rows.push({ label: '策略', value: strategy.is_running ? '🟢 运行中' : '🔴 已停止' });
     }
 
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    text += ledger.box('账号', rows);
     return text;
   }
 

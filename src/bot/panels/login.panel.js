@@ -1,27 +1,28 @@
 // src/bot/panels/login.panel.js
 const { Markup } = require('telegraf');
 const { maskPhone } = require('../../utils/mask.util');
+const ledger = require('../../utils/ledger.util');
 
 /**
-登录流程面板（LoginPanel）
-
-文档参考：§7.4
-
-重要原则：
-1. 本面板不允许 ctx.reply
-2. 本面板只通过 PanelRenderer.render() 渲染
-3. 所有登录步骤都通过 editMessageText 更新同一条消息
-
-登录步骤：
-phone   等待手机号
-code    等待验证码
-2fa     等待 2FA 密码
-success 登录成功
-*/
+ * 登录流程面板（LoginPanel）
+ *
+ * 文档参考：§7.4
+ *
+ * 重要原则：
+ * 1. 本面板不允许 ctx.reply
+ * 2. 本面板只通过 PanelRenderer.render() 渲染
+ * 3. 所有登录步骤都通过 editMessageText 更新同一条消息
+ *
+ * 登录步骤：
+ * phone   等待手机号
+ * code    等待验证码
+ * 2fa     等待 2FA 密码
+ * success 登录成功
+ */
 class LoginPanel {
   /**
-  PanelRenderer 调用入口
-  */
+   * PanelRenderer 调用入口
+   */
   static async render(ctx, data = {}) {
     const text = this.buildText(data);
     const keyboard = this.buildKeyboard(data);
@@ -40,64 +41,47 @@ class LoginPanel {
       errorMessage = null,
     } = data;
 
-    let text = '';
+    const errLine = errorMessage ? '\n❌ ' + errorMessage : '';
 
     if (step === 'phone') {
-      text += '📱 <b>登录执行账号</b>\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += '步骤：1/3\n';
-      text += '请输入您的 Telegram 手机号\n';
-      text += '格式：<code>+8613812341234</code>\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += '💡 请直接发送手机号消息';
-
-      if (errorMessage) {
-        text += `\n\n❌ ${errorMessage}`;
-      }
-
+      let text = '📱 <b>登录执行账号</b> · 步骤 1/3\n\n';
+      text += ledger.box('操作说明', [
+        { label: '动作', value: '直接发送手机号消息' },
+        { label: '格式', value: '+8613812341234' },
+      ]);
+      text += errLine;
       return text;
     }
 
     if (step === 'code') {
-      text += '🔐 <b>验证码</b>\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += '步骤：2/3\n';
-      text += `已向 ${this.formatPhone(phone)} 发送验证码\n`;
-      text += '⚠️ 为防止风控拦截，请输入带空格的验证码\n';
-      text += '例如：<code>1 2 3 4 5</code>\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += '💡 请直接发送带空格的验证码消息';
-
-      if (errorMessage) {
-        text += `\n\n❌ ${errorMessage}`;
-      }
-
+      let text = '🔐 <b>输入验证码</b> · 步骤 2/3\n\n';
+      text += ledger.box('操作说明', [
+        { label: '发送至', value: this.formatPhone(phone) },
+        { label: '动作', value: '直接发送验证码消息' },
+        { label: '注意', value: '需带空格，如 1 2 3 4 5' },
+      ]);
+      text += '\n💡 带空格输入可防止风控拦截';
+      text += errLine;
       return text;
     }
 
     if (step === '2fa') {
-      text += '🔒 <b>两步验证</b>\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += '步骤：3/3\n';
-      text += '您的账号启用了两步验证\n';
-      text += '请输入 2FA 密码\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += '💡 请直接发送 2FA 密码消息';
-
-      if (errorMessage) {
-        text += `\n\n❌ ${errorMessage}`;
-      }
-
+      let text = '🔒 <b>两步验证</b> · 步骤 3/3\n\n';
+      text += ledger.box('操作说明', [
+        { label: '原因', value: '账号已开启两步验证' },
+        { label: '动作', value: '直接发送 2FA 密码消息' },
+      ]);
+      text += errLine;
       return text;
     }
 
     if (step === 'success') {
-      text += '✅ <b>登录成功</b>\n';
-      text += '━━━━━━━━━━━━━━━━━━━━\n';
-      text += `账号：${this.formatPhone(phone)}\n`;
-      text += '状态：🟢 已登录\n';
-      text += '下一步请配置下注群\n';
-      text += '━━━━━━━━━━━━━━━━━━━━';
+      let text = '✅ <b>登录成功</b>\n\n';
+      text += ledger.box('账号', [
+        { label: '手机', value: this.formatPhone(phone) },
+        { label: '状态', value: '🟢 已登录' },
+        { label: '下一步', value: '配置下注群' },
+      ]);
       return text;
     }
 

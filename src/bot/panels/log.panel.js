@@ -1,5 +1,6 @@
 // src/bot/panels/log.panel.js
 const { Markup } = require('telegraf');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 操作日志面板（LogPanel）
@@ -23,18 +24,15 @@ class LogPanel {
   }
 
   static buildText({ page, logs }) {
-    let text = `📝 <b>操作日志（第 ${page || 1} 页）</b>\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
+    let text = `📝 <b>操作日志</b>\n\n`;
 
     if (logs && logs.length > 0) {
-      for (const log of logs) {
-        text += `${log.time} ${log.icon} ${log.text}\n`;
-      }
+      const rows = logs.map((log) => ({ label: log.time, value: `${log.icon} ${log.text}` }));
+      text += ledger.box(`第 ${page || 1} 页`, rows);
     } else {
-      text += '暂无操作记录\n';
+      text += ledger.box(`第 ${page || 1} 页`, [{ text: '暂无操作记录' }]);
     }
 
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
     return text;
   }
 

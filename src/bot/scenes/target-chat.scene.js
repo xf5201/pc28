@@ -2,6 +2,7 @@
 const { Scenes } = require('telegraf');
 const accountDao = require('../../db/account.dao');
 const logger = require('../../utils/logger');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 下注群 ID 手动输入 WizardScene
@@ -36,17 +37,13 @@ const targetChatScene = new Scenes.WizardScene(
       return ctx.scene.leave();
     }
 
-    let text = '🔗 <b>输入下注群 ID</b>\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += '请输入目标群的 Chat ID\n';
-    text += '格式：-1001234567890\n\n';
-    text += '💡 获取方式：\n';
-    text += '1. 将 @RawDataBot  拉入群中\n';
-    text += '2. 查看 message.chat.id\n';
-    text += '3. 复制 ID 后移除机器人\n';
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += '💡 请直接发送群 ID 消息\n';
-    text += '💡 发送 /cancel 取消';
+    let text = '🔗 <b>输入下注群 ID</b>\n\n';
+    text += ledger.box('下注群 ID', [
+      { label: '格式', value: '-1001234567890' },
+      { label: '动作', value: '直接发送群 ID 消息' },
+      { label: '取消', value: '发送 /cancel' },
+    ]);
+    text += '\n💡 获取方式：将 @RawDataBot 拉入群 → 查看 message.chat.id → 复制后移除';
 
     await ctx.reply(text, { parse_mode: 'HTML' });
 
@@ -127,11 +124,11 @@ const targetChatScene = new Scenes.WizardScene(
       );
 
       // 显示配置成功消息
-      let successText = '✅ <b>下注群配置成功</b>\n';
-      successText += '━━━━━━━━━━━━━━━━━━━━\n';
-      successText += `群名称：${chatTitle}\n`;
-      successText += `群 ID：${chatId}\n`;
-      successText += '━━━━━━━━━━━━━━━━━━━━\n';
+      let successText = '✅ <b>下注群配置成功</b>\n\n';
+      successText += ledger.box('下注群', [
+        { label: '群名称', value: chatTitle },
+        { label: '群 ID', value: chatId },
+      ]);
 
       await ctx.reply(successText, { parse_mode: 'HTML' });
 

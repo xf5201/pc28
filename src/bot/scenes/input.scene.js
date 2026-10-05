@@ -3,6 +3,7 @@ const { Scenes } = require('telegraf');
 const strategyConfigDao = require('../../db/strategy-config.dao');
 const panelContextDao = require('../../db/panel-context.dao');
 const logger = require('../../utils/logger');
+const ledger = require('../../utils/ledger.util');
 
 /**
  * 自定义输入 WizardScene
@@ -62,13 +63,13 @@ const inputScene = new Scenes.WizardScene(
     const strategy = await strategyConfigDao.getById(botUserId);
     const currentValue = strategy ? strategy[field] : '未设置';
 
-    let text = `🔢 <b>自定义${config.label}</b>\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += `当前值：${config.format ? config.format(currentValue) : currentValue}\n`;
-    text += `${config.prompt}\n`;
-    text += '━━━━━━━━━━━━━━━━━━━━\n';
-    text += '💡 请直接发送数值消息\n';
-    text += '💡 发送 /cancel 取消';
+    let text = `🔢 <b>自定义${config.label}</b>\n\n`;
+    text += ledger.box('自定义输入', [
+      { label: '当前值', value: config.format ? config.format(currentValue) : String(currentValue) },
+      { label: '动作', value: '直接发送数值消息' },
+      { label: '取消', value: '发送 /cancel' },
+    ]);
+    text += '\n💡 ' + config.prompt;
 
     try {
       await ctx.editMessageText(text, {
