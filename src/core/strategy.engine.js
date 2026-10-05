@@ -29,6 +29,19 @@ function calcSwitchLong(lastDir, initialMode, currDir) {
 }
 
 /**
+ * 获取玩法对应的初始模式
+ *   顺2反龙 → 顺（FOLLOW）；反2顺龙 → 反（REVERSE）；传统玩法返回 null
+ *
+ * 用途：选择玩法 / 启动策略时把 current_direction 重置回初始值，
+ * 避免上一局残留的 FOLLOW/REVERSE 导致首注方向不符预期。
+ */
+function initialModeFor(playType) {
+  if (playType === '顺2反龙') return MODES.FOLLOW;
+  if (playType === '反2顺龙') return MODES.REVERSE;
+  return null;
+}
+
+/**
  * 计算下一期的连挂数与当前模式（仅顺2反龙 / 反2顺龙使用）
  *
  * 规则：
@@ -123,6 +136,6 @@ function isValidPlayType(playType) { return ['顺龙', '反龙', '顺2反龙', '
 
 module.exports = {
   DIRECTIONS, OPPOSITE, MODES,
-  calcDirection, calcNextState, calcAmount, checkWin,
+  calcDirection, calcNextState, calcAmount, checkWin, initialModeFor,
   getDirectionLabel, isValidDirection, isValidPlayType,
 };

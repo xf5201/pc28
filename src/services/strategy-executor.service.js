@@ -5,7 +5,7 @@ const betRecordDao = require('../db/bet-record.dao');
 const openResultDao = require('../db/open-result.dao');
 const operationLogDao = require('../db/operation-log.dao');
 const { transaction } = require('../db/connection');
-const { calcDirection, calcAmount } = require('../core/strategy.engine');
+const { calcDirection, calcAmount, initialModeFor } = require('../core/strategy.engine');
 const { getOdds } = require('../core/odds.engine');
 const logger = require('../utils/logger');
 
@@ -41,6 +41,11 @@ class StrategyExecutorService {
       if (strategy.is_running === 1) throw new Error('策略已在运行中');
 
       strategyConfigDao.setRunning(botUserId);
+      // 每次启动回到玩法的初始模式（顺2反龙=顺 FOLLOW，反2顺龙=反 REVERSE），
+      // 并清零连挂：避免上一局残留的 FOLLOW/REVERSE 导致首注方向不符预期，
+      // 连挂清零同时保证首注金额从基础注重新开始
+      const initialMode = initialModeFor(strategy.play_type);
+      strategyConfigDao.updateLossesAndDirection(botUserId, 0, initialMode || strategy.current_direction);
       operationLogDao.insert({ bot_user_id: botUserId, action: 'START_STRATEGY', detail: `玩法=${strategy.play_type}` });
     });
 
@@ -160,7 +165,7 @@ class StrategyExecutorService {
           } catch (err) {
             logger.error(`[STRATEGY_EXEC] 延迟发送下注失败: ${err.message}`);
           }
-        }, 15000); // 30000 毫秒 = 30 秒
+        }, 30000); // 30000 毫秒 = 30 秒
       }
       return betRecord ? 'created_delayed' : 'skipped';
     } catch (error) {
@@ -173,6 +178,14 @@ class StrategyExecutorService {
     const strategy = strategyConfigDao.getById(botUserId);
     if (!strategy) throw new Error('请先登录账号');
     strategyConfigDao.updateConfig(botUserId, config);
+
+    // 切换玩法时回到新玩法的初始模式并清零连挂，
+    // 否则旧模式残留会让"顺2反龙"开局仍按上一局的"反"打
+    if (config.play_type && config.play_type !== strategy.play_type) {
+      const initialMode = initialModeFor(config.play_type);
+      strategyConfigDao.updateLossesAndDirection(botUserId, 0, initialMode || strategy.current_direction);
+    }
+
     operationLogDao.insert({ bot_user_id: botUserId, action: 'UPDATE_CONFIG', detail: JSON.stringify(config) });
   }
 }
